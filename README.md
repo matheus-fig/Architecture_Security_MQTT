@@ -1,2 +1,2 @@
 # SUPER-IoT-Cybersecurity_MQTT
-Detection and Mitigation of cyber attacks in MQTT networks
+Detection and Mitigation of cyberattacks in MQTT networks
