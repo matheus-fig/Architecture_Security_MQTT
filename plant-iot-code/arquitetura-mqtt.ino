@@ -54,7 +54,6 @@ void reconnect() {
       Serial.print(client.state());
       Serial.println(" Tentando novamente em 5 segundos...");
       
-      // Espera 5 segundos antes de tentar reconectar
       delay(5000);
     }
   }
@@ -69,10 +68,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
   // condicao se a mensagem é para o topico do led 
   if (strcmp(topic, mqtt_topic_led) == 0) {
     if ((char)payload[0] == '1') {
-      digitalWrite(LED, HIGH); // Acende o LED
+      digitalWrite(LED, HIGH);
       Serial.println("LED ligado!");
     } else if ((char)payload[0] == '0') {
-      digitalWrite(LED, LOW); // Apaga o LED
+      digitalWrite(LED, LOW);
       Serial.println("LED desligado!");
     }
   }
