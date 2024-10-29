@@ -16,6 +16,7 @@
                 <keystore>
                     <path>conf/my_keystore.jks</path>
                     <password>superIOT</password>
+                    <private-key-password>superIOT</private-key-password>
                 </keystore>
                 <truststore>
                     <path>conf/my_truststore.jks</path>
