@@ -1,7 +1,10 @@
 import pickle
+from sklearn.preprocessing import LabelEncoder
 from scapy.all import sniff, IP, TCP, Raw
 from scapy.layers.mqtt import MQTT
 import numpy as np
+
+label_encoder = LabelEncoder()
 
 # modelo SVM treinado
 with open('svm_model.pkl', 'rb') as file:
