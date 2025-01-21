@@ -1,74 +1,129 @@
-import pickle
-from sklearn.preprocessing import LabelEncoder
-from scapy.all import sniff, IP, TCP, Raw
-from scapy.layers.mqtt import MQTT
+# pre processa e implementa o modelo de IA
+
+import pyshark
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 import numpy as np
+import pickle  # Usaremos joblib para carregar o modelo .pkl
 
-label_encoder = LabelEncoder()
+# Define as features categóricas que devem usar Label Encoding
+categorical_features = ['tcp.flags', 'mqtt.conack.flags', 'mqtt.conflag.cleansess', 'mqtt.conflags', 
+                        'mqtt.dupflag', 'mqtt.hdrflags', 'mqtt.msg', 'mqtt.msgtype', 'mqtt.protoname']
 
-# modelo SVM treinado
-with open('svm_model.pkl', 'rb') as file:
-    svm_model = pickle.load(file)
+# Features numéricas para normalização
+numeric_features = ['tcp.flags', 'tcp.time_delta', 'tcp.len', 'mqtt.conack.flags',
+       'mqtt.conflag.cleansess', 'mqtt.conflags', 'mqtt.dupflag',
+       'mqtt.hdrflags', 'mqtt.kalive', 'mqtt.len', 'mqtt.msg', 'mqtt.msgid',
+       'mqtt.msgtype', 'mqtt.proto_len', 'mqtt.protoname', 'mqtt.qos',
+       'mqtt.ver']
 
-# pré-processador (StandardScaler)
-with open('scaler.pkl', 'rb') as file:
-    scaler = pickle.load(file)
+# Inicializa o Label Encoder para cada feature categórica
+label_encoders = {feature: LabelEncoder() for feature in categorical_features}
 
-# codificador de variáveis categóricas (LabelEncoder)
-with open('label_encoder.pkl', 'rb') as file:
-    label_encoder = pickle.load(file)
+# Inicializa o Standard Scaler para normalizar as features numéricas
+scaler = StandardScaler()
 
-# processamento de pacotes e extração de características
-def process_packet(packet):
+# Função para ajustar classes dinamicamente para o LabelEncoder
+def fit_label_encoder(encoder, value):
+    # Ajusta o LabelEncoder e transforma o valor ao mesmo tempo
+    return encoder.fit_transform([value])[0]  # Aplica fit_transform e retorna o valor codificado
+
+def preprocess_value(value, feature_name):
+    """
+    Preprocessa o valor capturado. Substitui N/A por 0 e aplica Label Encoding para valores categóricos,
+    e normalização para valores numéricos.
+
+    Args:
+        value: O valor capturado.
+        feature_name: Nome da feature para aplicar o método correspondente (Label Encoding ou Normalização).
+
+    Returns:
+        O valor preprocessado.
+    """
+    if value == 'N/A' or value is None:
+        return 0
     try:
-        if packet.haslayer(TCP) and packet.haslayer(MQTT):
-            # features TCP
-            tcp_flags = packet[TCP].flags
-            tcp_time_delta = getattr(packet.time, 'delta', 0)
-            tcp_len = len(packet[TCP].payload)
-            
-            # features MQTT
-            mqtt_layer = packet[MQTT]
-            features = {
-                'tcp.flags': tcp_flags,
-                'tcp.time_delta': tcp_time_delta,
-                'tcp.len': tcp_len,
-                'mqtt.conack.flags': getattr(mqtt_layer, 'CONACK.flags', 0),
-                'mqtt.conflag.cleansess': getattr(mqtt_layer, 'CONFLAG.cleansess', 0),
-                'mqtt.conflags': getattr(mqtt_layer, 'CONFLAG', 0),
-                'mqtt.dupflag': getattr(mqtt_layer, 'DUPFLAG', 0),
-                'mqtt.hdrflags': getattr(mqtt_layer, 'HDRFLAGS', 0),
-                'mqtt.kalive': getattr(mqtt_layer, 'KALIVE', 0),
-                'mqtt.len': getattr(mqtt_layer, 'LEN', 0),
-                'mqtt.msg': getattr(mqtt_layer, 'MSG', 0),
-                'mqtt.msgid': getattr(mqtt_layer, 'MSGID', 0),
-                'mqtt.msgtype': getattr(mqtt_layer, 'MSGTYPE', 0),
-                'mqtt.proto_len': getattr(mqtt_layer, 'PROTO_LEN', 0),
-                'mqtt.protoname': getattr(mqtt_layer, 'PROTONAME', ''),
-                'mqtt.qos': getattr(mqtt_layer, 'QOS', 0),
-                'mqtt.ver': getattr(mqtt_layer, 'VER', 0),
-            }
+        # Aplica Label Encoding se a feature for categórica
+        if feature_name in categorical_features:
+            encoder = label_encoders[feature_name]
+            return fit_label_encoder(encoder, value)
 
-            # variáveis categóricas
-            for col in categorical_columns:
-                if col in features and isinstance(features[col], str):
-                    features[col] = label_encoder.transform([features[col]])[0]
+        # Aplica normalização se a feature for numérica
+        if feature_name in numeric_features:
+            return float(value)
 
-            return np.array(list(features.values()))
+        return value
     except Exception as e:
-        print(f"Erro ao processar pacote: {e}")
-    return None
+        print(f"Erro ao processar {feature_name}: {e}")
+        return value
 
-# detecção ataques
-def detect_attack(packet):
-    features = process_packet(packet)
-    if features is not None:
-        # padronização
-        features = scaler.transform([features])
-        prediction = svm_model.predict(features)
-        if prediction[0] == 1:
-            print("Ataque detectado!")
+def capture_and_preprocess(interface, capture_filter, model):
+    """
+    Captura pacotes TCP e MQTT, preprocessa os valores em tempo real, faz a classificação com o modelo e exibe os resultados.
 
-# captura de pacotes
-print("Capturando pacotes...")
-sniff(filter="tcp port 1883", prn=detect_attack, store=False)
+    Args:
+        interface (str): Nome da interface de rede para captura (ex.: 'eth0').
+        capture_filter (str): Filtro para captura de pacotes (ex.: 'tcp or mqtt').
+        model: O modelo de IA carregado a partir de um arquivo .pkl.
+    """
+    capture = pyshark.LiveCapture(interface=interface, display_filter=capture_filter)
+
+    for packet in capture.sniff_continuously():
+        print("\n--- Novo Pacote Capturado ---")
+        try:
+            # Extraindo e preprocessando os valores dos pacotes
+            features = []
+
+            # Preprocessa e extrai as informações da camada TCP
+            if 'TCP' in packet:
+                tcp_layer = packet.tcp
+                features.append(preprocess_value(tcp_layer.flags, 'tcp.flags'))
+                features.append(preprocess_value(getattr(tcp_layer, 'time_delta', 'N/A'), 'tcp.time_delta'))
+                features.append(preprocess_value(getattr(tcp_layer, 'len', 'N/A'), 'tcp.len'))
+
+            # Preprocessa e extrai as informações da camada MQTT
+            if 'MQTT' in packet:
+                mqtt_layer = packet.mqtt
+                features.append(preprocess_value(getattr(mqtt_layer, 'conack_flags', 'N/A'), 'mqtt.conack.flags'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'conflag_cleansess', 'N/A'), 'mqtt.conflag.cleansess'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'conflags', 'N/A'), 'mqtt.conflags'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'dupflag', 'N/A'), 'mqtt.dupflag'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'hdrflags', 'N/A'), 'mqtt.hdrflags'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'kalive', 'N/A'), 'mqtt.kalive'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'len', 'N/A'), 'mqtt.len'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'msg', 'N/A'), 'mqtt.msg'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'msgid', 'N/A'), 'mqtt.msgid'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'msgtype', 'N/A'), 'mqtt.msgtype'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'proto_len', 'N/A'), 'mqtt.proto_len'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'protoname', 'N/A'), 'mqtt.protoname'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'qos', 'N/A'), 'mqtt.qos'))
+                features.append(preprocess_value(getattr(mqtt_layer, 'ver', 'N/A'), 'mqtt.ver'))
+
+            # Normalizando as features numéricas
+            features_normalized = scaler.fit_transform([features])[0]
+
+            # Fazendo a previsão com o modelo carregado
+            prediction = model.predict([features_normalized])
+
+            print(f"Classificação do Pacote: {prediction[0]}")
+
+        except Exception as e:
+            print(f"Erro ao processar pacote: {e}")
+
+if __name__ == "__main__":
+    # Carregar o modelo salvo em .pkl (substitua o caminho pelo seu arquivo .pkl)
+    with open("/home/lab-iot03/DoSDefender2/modelo/svm_model.pkl", "rb") as model_file:
+        model = pickle.load(model_file)
+
+    # Substitua 'eth0' pela interface de rede apropriada (ex.: 'wlan0' ou 'lo')
+    interface = "wlo1"
+    capture_filter = "tcp or mqtt"  # Filtro para pacotes TCP e MQTT
+
+    print("Iniciando captura de pacotes e classificação com IA. Pressione Ctrl+C para parar.")
+    try:
+        capture_and_preprocess(interface, capture_filter, model)
+    except KeyboardInterrupt:
+        print("\nCaptura encerrada pelo usuário.")
+    except Exception as e:
+        print(f"Erro: {e}")
+    finally:
+        print("\nA captura e classificação foram finalizadas.")
