@@ -36,10 +36,12 @@ The tool captures network packets in real-time, extracts relevant features, and 
 
 ## 📂 Project Structure
 ```bash
-📂 DetectorDoS_MQTT
-├── main.py                 # Main code for packet capture and attack detection
-├── plant_2code.ino         # ESP32 firmware for temperature collection via MQTT
-├── models/
+📂 SUPER-IoT-Cybersecurity_MQTT
+├── Plant_Code/
+   ├── plant_2code.ino               # ESP32 firmware for temperature collection via MQTT
+├── Security Architecture/
+   ├── main.py                       # Main code for packet capture and attack detection
+├── Training Machine Learning model/
 │   ├── ada_model.pkl       # Trained model for packet classification
 ├── README.md               # Project documentation
 ```
