@@ -42,8 +42,8 @@ The tool captures network packets in real-time, extracts relevant features, and 
 ├── Security Architecture/
    ├── main.py                       # Main code for packet capture and attack detection
 ├── Training Machine Learning model/
-│   ├── ada_model.pkl       # Trained model for packet classification
-├── README.md               # Project documentation
+│   ├── ada_model.pkl                # Trained model for packet classification
+├── README.md                        # Project documentation
 ```
 
 ---
