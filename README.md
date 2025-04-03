@@ -89,4 +89,4 @@ python main.py
 ---
 
 ### 📬 Contact
-If you have any questions or need support, please contact lucadias@super.ufam.edu.br or matheuscastro@super.ufam.edu.br
+If you have any questions or need support, please contact luca.naja@ufam.edu.br or matheusfigueiredo@ufam.edu.br
